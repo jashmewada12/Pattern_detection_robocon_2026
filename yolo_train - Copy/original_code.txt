@@ -1,0 +1,118 @@
+import cv2
+import numpy as np
+import onnxruntime as ort
+from ultralytics import YOLO
+
+def main():
+    # --- CONFIGURATION ---
+    FINDER_MODEL = "best.onnx"    # Your YOLO Model
+    READER_MODEL = "reader.onnx"  # Your Classifier Model
+    CLASS_FILE = "classes.txt"    # Your list of names
+    CONF_THRESHOLD = 0.5
+    # ---------------------
+
+    # 1. Load Class Names
+    try:
+        with open(CLASS_FILE, "r") as f:
+            class_names = [line.strip() for line in f.readlines()]
+        print(f"✅ Loaded {len(class_names)} classes.")
+    except FileNotFoundError:
+        print(f"❌ Error: Could not find {CLASS_FILE}.")
+        return
+
+    # 2. Load Models
+    print("🚀 Loading Models...")
+    try:
+        # Load Finder
+        finder = YOLO(FINDER_MODEL, task='detect')
+        
+        # Load Reader (Try GPU, else CPU)
+        providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+        reader_session = ort.InferenceSession(READER_MODEL, providers=providers)
+        input_name = reader_session.get_inputs()[0].name
+    except Exception as e:
+        print(f"❌ Error loading models: {e}")
+        return
+
+    # 3. Start Camera
+    cap = cv2.VideoCapture(1)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
+    print("✅ System Ready. Press 'q' to exit.")
+
+    while True:
+        success, frame = cap.read()
+        if not success: break
+
+        # A. Run YOLO Finder
+        results = finder(frame, conf=CONF_THRESHOLD, verbose=False)
+
+        for r in results:
+            for box in r.boxes:
+                # Get coordinates
+                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().astype(int)
+                
+                # Safety Clip
+                h, w, _ = frame.shape
+                x1, y1 = max(0, x1), max(0, y1)
+                x2, y2 = min(w, x2), min(h, y2)
+                
+                crop = frame[y1:y2, x1:x2]
+                if crop.size == 0: continue
+
+                # B. Preprocess for Reader
+                try:
+                    blob = cv2.resize(crop, (224, 224))
+                    blob = cv2.cvtColor(blob, cv2.COLOR_BGR2RGB)
+                    blob = blob.astype(np.float32) / 255.0
+                    
+                    # Normalize (ImageNet stats)
+                    mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+                    std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+                    blob = (blob - mean) / std
+                    
+                    # Shape: (1, 3, 224, 224)
+                    blob = blob.transpose(2, 0, 1)
+                    blob = np.expand_dims(blob, axis=0)
+
+                    # C. Run Classification
+                    outputs = reader_session.run(None, {input_name: blob})
+                    probs = outputs[0][0]
+                    pred_id = np.argmax(probs)
+                    
+                    # Get Label Name
+                    if pred_id < len(class_names):
+                        pred_label = class_names[pred_id]
+                    else:
+                        pred_label = "Unknown"
+
+                    # --- D. COLOR LOGIC (Automatic) ---
+                    # Check the STRING name, not the number ID
+                    if "fake" in pred_label.lower():
+                        color = (0, 0, 255)  # RED (BGR format)
+                        status = "FAKE"
+                    elif "real" in pred_label.lower():
+                        color = (0, 255, 0)  # GREEN (BGR format)
+                        status = "REAL"
+                    else:
+                        color = (255, 0, 0)  # BLUE (Unknown)
+                        status = pred_label
+
+                    # Draw
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), color, 3)
+                    cv2.putText(frame, f"{status}: {pred_label}", (x1, y1 - 10), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+                               
+                except Exception as e:
+                    pass # Skip bad crops
+
+        cv2.imshow("Laptop Test", frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    main()

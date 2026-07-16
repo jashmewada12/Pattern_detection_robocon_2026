@@ -1,0 +1,4 @@
+train: C:/Users/ASUS/Desktop/yolo_train/yolo_26/train/images
+val: C:/Users/ASUS/Desktop/yolo_train/yolo_26/val/images
+nc: 2  # Number of classes
+names: ['crop_','box_red_fake_']

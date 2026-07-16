@@ -1,0 +1,3 @@
+blue_real
+fake_red
+real_red

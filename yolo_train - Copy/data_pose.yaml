@@ -1,0 +1,15 @@
+# Root directory of your dataset
+path: C:/Users/ASUS/Desktop/yolo_train/yolo_pose_dataset
+
+# Relative paths to images (from the root path above)
+train: train/images
+val: val/images
+
+# Class configuration
+nc: 1
+names: ['fake_kfs']
+
+# Pose configuration (Required for Pose models)
+# [number of keypoints, number of dimensions] 
+# Note: Using 0 as a placeholder since your XML only has boxes
+kpt_shape: [1, 2]

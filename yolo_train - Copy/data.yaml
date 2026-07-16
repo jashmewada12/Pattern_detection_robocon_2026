@@ -1,0 +1,5 @@
+train: C:/Users/ASUS/Desktop/yolo_train/yolo_dataset/train/images
+val: C:/Users/ASUS/Desktop/yolo_train/yolo_dataset/val/images
+
+nc: 2  # Number of classes
+names: ['box_scroll','blue_box_scroll']
